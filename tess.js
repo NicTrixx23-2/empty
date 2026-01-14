@@ -1,129 +1,127 @@
-/*  Tesseract <-> Cube (no libs, single JS file)
-    - Press "1" => rotating 3D cube
-    - Press "2" => rotating 4D tesseract (projected to 3D then to 2D)
-    Works in a browser. Put into a .js file and include via <script>.
-
-    Tip: If you want it truly standalone, paste into console on a blank page.
+/*  ES5 Cube <-> Tesseract
+    - Only var
+    - No arrow functions
+    - No const / let
+    - No external libs
 */
 
-(() => {
-  // ---------- Canvas ----------
-  const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
+(function () {
+
+  /* ---------- Canvas ---------- */
+  var canvas = document.createElement("canvas");
+  var ctx = canvas.getContext("2d");
   document.body.style.margin = "0";
-  document.body.style.background = "#0b0b10";
+  document.body.style.background = "#000";
   document.body.appendChild(canvas);
 
   function resize() {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    canvas.width = Math.floor(w * dpr);
-    canvas.height = Math.floor(h * dpr);
-    canvas.style.width = w + "px";
-    canvas.style.height = h + "px";
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
   }
   window.addEventListener("resize", resize);
   resize();
 
-  // ---------- Mode handling ----------
-  let mode = "tesseract"; // "cube" or "tesseract"
-  window.addEventListener("keydown", (e) => {
-    if (e.key === "1") mode = "cube";
-    if (e.key === "2") mode = "tesseract";
+  /* ---------- Mode ---------- */
+  var mode = "tesseract"; // "cube" or "tesseract"
+
+  window.addEventListener("keydown", function (e) {
+    if (e.keyCode === 49) mode = "cube";       // 1
+    if (e.keyCode === 50) mode = "tesseract";  // 2
   });
 
-  // ---------- Math helpers ----------
-  const TAU = Math.PI * 2;
-  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-
-  // 3D rotation matrices applied directly
+  /* ---------- Math ---------- */
   function rot3(v, ax, ay, az) {
-    let { x, y, z } = v;
+    var x = v.x, y = v.y, z = v.z;
+    var c, s;
 
-    // X
-    {
-      const c = Math.cos(ax), s = Math.sin(ax);
-      const y2 = y * c - z * s;
-      const z2 = y * s + z * c;
-      y = y2; z = z2;
-    }
-    // Y
-    {
-      const c = Math.cos(ay), s = Math.sin(ay);
-      const x2 = x * c + z * s;
-      const z2 = -x * s + z * c;
-      x = x2; z = z2;
-    }
-    // Z
-    {
-      const c = Math.cos(az), s = Math.sin(az);
-      const x2 = x * c - y * s;
-      const y2 = x * s + y * c;
-      x = x2; y = y2;
-    }
-    return { x, y, z };
+    c = Math.cos(ax); s = Math.sin(ax);
+    y = y * c - z * s;
+    z = y * s + z * c;
+
+    c = Math.cos(ay); s = Math.sin(ay);
+    x = x * c + z * s;
+    z = -x * s + z * c;
+
+    c = Math.cos(az); s = Math.sin(az);
+    x = x * c - y * s;
+    y = x * s + y * c;
+
+    return { x: x, y: y, z: z };
   }
 
-  // 4D rotation in a plane (i,j) by angle
   function rot4(v, i, j, a) {
-    const c = Math.cos(a), s = Math.sin(a);
-    const arr = [v.x, v.y, v.z, v.w];
-    const vi = arr[i], vj = arr[j];
+    var c = Math.cos(a);
+    var s = Math.sin(a);
+    var arr = [v.x, v.y, v.z, v.w];
+    var vi = arr[i];
+    var vj = arr[j];
     arr[i] = vi * c - vj * s;
     arr[j] = vi * s + vj * c;
     return { x: arr[0], y: arr[1], z: arr[2], w: arr[3] };
   }
 
-  // 4D -> 3D perspective projection
-  function proj4to3(v, wDist = 3.0) {
-    // Factor similar to 3D perspective but with w
-    const denom = (wDist - v.w);
-    const k = denom !== 0 ? (wDist / denom) : 999;
+  function proj4to3(v) {
+    var d = 3;
+    var k = d / (d - v.w);
     return { x: v.x * k, y: v.y * k, z: v.z * k };
   }
 
-  // 3D -> 2D perspective projection
-  function proj3to2(v, zDist = 5.0, scale = 1.0) {
-    const denom = (zDist - v.z);
-    const k = denom !== 0 ? (zDist / denom) : 999;
+  function proj3to2(v, scale) {
+    var d = 5;
+    var k = d / (d - v.z);
     return { x: v.x * k * scale, y: v.y * k * scale };
   }
 
-  // ---------- Geometry ----------
-  function cubeVertices(size = 1) {
-    const s = size;
-    const vs = [];
-    for (const x of [-s, s]) for (const y of [-s, s]) for (const z of [-s, s]) {
-      vs.push({ x, y, z });
-    }
-    return vs;
+  /* ---------- Geometry ---------- */
+  function cubeVertices() {
+    var v = [];
+    var s = 1;
+    var xs = [-s, s];
+    var ys = [-s, s];
+    var zs = [-s, s];
+    var i, j, k;
+
+    for (i = 0; i < 2; i++)
+      for (j = 0; j < 2; j++)
+        for (k = 0; k < 2; k++)
+          v.push({ x: xs[i], y: ys[j], z: zs[k] });
+
+    return v;
   }
 
-  function tesseractVertices(size = 1) {
-    const s = size;
-    const vs = [];
-    for (const x of [-s, s])
-      for (const y of [-s, s])
-        for (const z of [-s, s])
-          for (const w of [-s, s]) {
-            vs.push({ x, y, z, w });
-          }
-    return vs;
+  function tesseractVertices() {
+    var v = [];
+    var s = 1;
+    var xs = [-s, s];
+    var ys = [-s, s];
+    var zs = [-s, s];
+    var ws = [-s, s];
+    var i, j, k, l;
+
+    for (i = 0; i < 2; i++)
+      for (j = 0; j < 2; j++)
+        for (k = 0; k < 2; k++)
+          for (l = 0; l < 2; l++)
+            v.push({ x: xs[i], y: ys[j], z: zs[k], w: ws[l] });
+
+    return v;
   }
 
-  // Edges: connect vertices that differ in exactly one coordinate sign
-  function edgesFromVerticesN(vertices, dims) {
-    const edges = [];
-    for (let i = 0; i < vertices.length; i++) {
-      for (let j = i + 1; j < vertices.length; j++) {
-        let diff = 0;
-        for (let d = 0; d < dims; d++) {
-          const a = d === 0 ? vertices[i].x : d === 1 ? vertices[i].y : d === 2 ? vertices[i].z : vertices[i].w;
-          const b = d === 0 ? vertices[j].x : d === 1 ? vertices[j].y : d === 2 ? vertices[j].z : vertices[j].w;
+  function buildEdges(vertices, dims) {
+    var edges = [];
+    var i, j, d, diff, a, b;
+
+    for (i = 0; i < vertices.length; i++) {
+      for (j = i + 1; j < vertices.length; j++) {
+        diff = 0;
+        for (d = 0; d < dims; d++) {
+          a = d === 0 ? vertices[i].x :
+              d === 1 ? vertices[i].y :
+              d === 2 ? vertices[i].z : vertices[i].w;
+          b = d === 0 ? vertices[j].x :
+              d === 1 ? vertices[j].y :
+              d === 2 ? vertices[j].z : vertices[j].w;
           if (a !== b) diff++;
-          if (diff > 1) break;
         }
         if (diff === 1) edges.push([i, j]);
       }
@@ -131,132 +129,81 @@
     return edges;
   }
 
-  const cubeV = cubeVertices(1);
-  const cubeE = edgesFromVerticesN(cubeV, 3);
+  var cubeV = cubeVertices();
+  var cubeE = buildEdges(cubeV, 3);
 
-  const tessV = tesseractVertices(1);
-  const tessE = edgesFromVerticesN(tessV, 4);
+  var tessV = tesseractVertices();
+  var tessE = buildEdges(tessV, 4);
 
-  // ---------- Rendering ----------
-  function clear(w, h) {
-    ctx.fillStyle = "#0b0b10";
-    ctx.fillRect(0, 0, w, h);
-  }
-
-  function text(x, y, str, size = 14, align = "left") {
-    ctx.fillStyle = "rgba(255,255,255,0.92)";
-    ctx.font = `${size}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
-    ctx.textAlign = align;
-    ctx.textBaseline = "top";
-    ctx.fillText(str, x, y);
-  }
-
-  function drawWire(points2, edges, cx, cy, lineAlpha = 0.85) {
+  /* ---------- Draw ---------- */
+  function draw(points, edges, cx, cy) {
+    ctx.strokeStyle = "#fff";
     ctx.lineWidth = 2;
-    ctx.strokeStyle = `rgba(255,255,255,${lineAlpha})`;
-
     ctx.beginPath();
-    for (const [a, b] of edges) {
-      const p = points2[a], q = points2[b];
+
+    var i, e, p, q;
+    for (i = 0; i < edges.length; i++) {
+      e = edges[i];
+      p = points[e[0]];
+      q = points[e[1]];
       ctx.moveTo(cx + p.x, cy + p.y);
       ctx.lineTo(cx + q.x, cy + q.y);
     }
     ctx.stroke();
-
-    // tiny nodes
-    ctx.fillStyle = "rgba(255,255,255,0.75)";
-    for (const p of points2) {
-      ctx.beginPath();
-      ctx.arc(cx + p.x, cy + p.y, 2.5, 0, TAU);
-      ctx.fill();
-    }
   }
 
-  // Sort edges by average depth (simple painter's trick)
-  function sortEdgesByDepth(points3, edges) {
-    return edges
-      .map((e) => {
-        const a = points3[e[0]], b = points3[e[1]];
-        const dz = (a.z + b.z) * 0.5;
-        return { e, dz };
-      })
-      .sort((u, v) => u.dz - v.dz)
-      .map((x) => x.e);
-  }
+  /* ---------- Loop ---------- */
+  var t = 0;
 
-  // ---------- Animation loop ----------
-  let last = performance.now();
-  let t = 0;
+  function loop() {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  function frame(now) {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
+    var cx = canvas.width / 2;
+    var cy = canvas.height / 2;
+    var scale = Math.min(canvas.width, canvas.height) * 0.2;
 
-    const dt = Math.min(0.05, (now - last) / 1000);
-    last = now;
-    t += dt;
-
-    clear(w, h);
-
-    const cx = w / 2;
-    const cy = h / 2;
-
-    // shared “camera”
-    const scale = Math.min(w, h) * 0.18;
+    var i, v, p;
 
     if (mode === "cube") {
-      const ax = t * 0.9;
-      const ay = t * 0.7;
-      const az = t * 0.5;
+      var pts3 = [];
+      var pts2 = [];
 
-      const pts3 = cubeV.map((v) => rot3(v, ax, ay, az));
-      // perspective
-      const pts2 = pts3.map((v) => {
-        const p = proj3to2(v, 4.5, scale);
-        return { x: p.x, y: p.y };
-      });
+      for (i = 0; i < cubeV.length; i++) {
+        v = rot3(cubeV[i], t, t * 0.7, t * 0.4);
+        pts3.push(v);
+        p = proj3to2(v, scale);
+        pts2.push(p);
+      }
+      draw(pts2, cubeE, cx, cy);
 
-      const edgesSorted = sortEdgesByDepth(pts3, cubeE);
-      drawWire(pts2, edgesSorted, cx, cy, 0.9);
-
-      text(14, 14, "Mode: Cube (press 2 for tesseract)", 14);
-      text(14, 34, "Press 1 = cube, 2 = tesseract", 12);
     } else {
-      // 4D rotations in multiple planes
-      const a1 = t * 0.7;
-      const a2 = t * 0.5;
-      const a3 = t * 0.9;
+      var pts4 = [];
+      var pts3b = [];
+      var pts2b = [];
 
-      // 4D rotate then project to 3D, then rotate 3D a bit and project to 2D
-      const pts4 = tessV.map((v0) => {
-        let v = v0;
-        v = rot4(v, 0, 3, a1); // x-w
-        v = rot4(v, 1, 3, a2); // y-w
-        v = rot4(v, 0, 2, a3); // x-z
-        return v;
-      });
+      for (i = 0; i < tessV.length; i++) {
+        v = tessV[i];
+        v = rot4(v, 0, 3, t);
+        v = rot4(v, 1, 3, t * 0.7);
+        v = rot4(v, 0, 2, t * 0.5);
+        pts4.push(v);
+      }
 
-      const pts3 = pts4.map((v) => proj4to3(v, 3.2));
-      const pts3r = pts3.map((v) => rot3(v, t * 0.35, t * 0.25, t * 0.15));
-
-      const pts2 = pts3r.map((v) => {
-        const p = proj3to2(v, 5.3, scale);
-        return { x: p.x, y: p.y };
-      });
-
-      // Depth-sort edges using projected 3D depth
-      const edgesSorted = sortEdgesByDepth(pts3r, tessE);
-
-      // Slight depth-based alpha: closer = brighter
-      // We'll do one pass with thicker lines for a clean look
-      drawWire(pts2, edgesSorted, cx, cy, 0.85);
-
-      text(14, 14, "Mode: Tesseract (press 1 for cube)", 14);
-      text(14, 34, "Press 1 = cube, 2 = tesseract", 12);
+      for (i = 0; i < pts4.length; i++) {
+        v = proj4to3(pts4[i]);
+        v = rot3(v, t * 0.3, t * 0.2, t * 0.1);
+        pts3b.push(v);
+        p = proj3to2(v, scale);
+        pts2b.push(p);
+      }
+      draw(pts2b, tessE, cx, cy);
     }
 
-    requestAnimationFrame(frame);
+    t += 0.01;
+    requestAnimationFrame(loop);
   }
 
-  requestAnimationFrame(frame);
+  loop();
+
 })();
